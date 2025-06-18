@@ -45,17 +45,18 @@ let remoteSocketId = null
 
 socket.on('existing-peers', (peers) => {
   peers.forEach(async (id) => {
-    const pc = createPeerConnection(id)
-    peerConnections[id] = pc
+    if (!peerConnections[id]) {
+      const pc = createPeerConnection(id)
+      peerConnections[id] = pc
 
-    localStream.getTracks().forEach((track) => pc.addTrack(track, localStream))
+      localStream.getTracks().forEach((track) => pc.addTrack(track, localStream))
 
-    const offer = await pc.createOffer()
-    await pc.setLocalDescription(offer)
-    socket.emit('offer', { sdp: offer, target: id })
+      const offer = await pc.createOffer()
+      await pc.setLocalDescription(offer)
+      socket.emit('offer', { sdp: offer, target: id })
+    }
   })
 })
-
 socket.on('peer-joined', async (id) => {
   const pc = createPeerConnection(id)
   peerConnections[id] = pc
@@ -68,15 +69,24 @@ socket.on('peer-joined', async (id) => {
 })
 
 socket.on('offer', async ({ sdp, caller }) => {
-  const pc = createPeerConnection(caller)
-  peerConnections[caller] = pc
+  let pc = peerConnections[caller]
 
-  localStream.getTracks().forEach((track) => pc.addTrack(track, localStream))
+  if (!pc) {
+    pc = createPeerConnection(caller)
+    peerConnections[caller] = pc
 
-  await pc.setRemoteDescription(new RTCSessionDescription(sdp))
-  const answer = await pc.createAnswer()
-  await pc.setLocalDescription(answer)
-  socket.emit('answer', { sdp: answer, target: caller })
+    localStream.getTracks().forEach((track) => pc.addTrack(track, localStream))
+  }
+
+  // 🛡️ Only apply remote offer if the state is correct
+  if (pc.signalingState === 'stable') {
+    await pc.setRemoteDescription(new RTCSessionDescription(sdp))
+    const answer = await pc.createAnswer()
+    await pc.setLocalDescription(answer)
+    socket.emit('answer', { sdp: answer, target: caller })
+  } else {
+    console.warn(`⚠️ Skipped setRemoteDescription. Current signalingState: ${pc.signalingState}`)
+  }
 })
 
 socket.on('answer', async ({ sdp, callee }) => {
