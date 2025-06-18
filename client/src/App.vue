@@ -45,29 +45,24 @@ let remoteSocketId = null
 
 socket.on('existing-peers', (peers) => {
   peers.forEach(async (id) => {
-    if (!peerConnections[id]) {
-      const pc = createPeerConnection(id)
-      peerConnections[id] = pc
+    const pc = createPeerConnection(id)
+    peerConnections[id] = pc
 
-      localStream.getTracks().forEach((track) => pc.addTrack(track, localStream))
+    localStream.getTracks().forEach((track) => pc.addTrack(track, localStream))
 
-      const offer = await pc.createOffer()
-      await pc.setLocalDescription(offer)
-      socket.emit('offer', { sdp: offer, target: id })
-    }
+    const offer = await pc.createOffer()
+    await pc.setLocalDescription(offer)
+    socket.emit('offer', { sdp: offer, target: id })
   })
 })
 socket.on('peer-joined', async (id) => {
+  if (peerConnections[id]) return // already connected
+
   const pc = createPeerConnection(id)
   peerConnections[id] = pc
 
   localStream.getTracks().forEach((track) => pc.addTrack(track, localStream))
-
-  const offer = await pc.createOffer()
-  await pc.setLocalDescription(offer)
-  socket.emit('offer', { sdp: offer, target: id })
 })
-
 socket.on('offer', async ({ sdp, caller }) => {
   let pc = peerConnections[caller]
 

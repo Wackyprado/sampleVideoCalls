@@ -17,17 +17,15 @@ const io = new Server(server, {
 const port = process.env.PORT || 3000;
 
 io.on('connection', (socket) => {
-  socket.on('join', (roomId) => {
-    socket.join(roomId);
+socket.on('join', (roomId) => {
+  socket.join(roomId)
+  const peersInRoom = [...io.sockets.adapter.rooms.get(roomId)].filter(id => id !== socket.id)
+  socket.emit('existing-peers', peersInRoom)
 
-    // Notify existing peers about the new one
-    socket.to(roomId).emit('peer-joined', socket.id);
+  // Notify others
+  socket.to(roomId).emit('peer-joined', socket.id)
+})
 
-    // Send existing peer list to new peer
-    const peers = Array.from(io.sockets.adapter.rooms.get(roomId) || []);
-    const others = peers.filter(id => id !== socket.id);
-    socket.emit('existing-peers', others);
-  });
 
   socket.on('offer', ({ sdp, target }) => {
     io.to(target).emit('offer', { sdp, caller: socket.id });
