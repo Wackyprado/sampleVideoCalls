@@ -41,6 +41,19 @@ onMounted(async () => {
 
 let remoteSocketId = null
 
+socket.on('existing-peers', (peers) => {
+  peers.forEach(async (id) => {
+    const pc = createPeerConnection(id)
+    peerConnections[id] = pc
+
+    localStream.getTracks().forEach((track) => pc.addTrack(track, localStream))
+
+    const offer = await pc.createOffer()
+    await pc.setLocalDescription(offer)
+    socket.emit('offer', { sdp: offer, target: id })
+  })
+})
+
 socket.on('peer-joined', async (id) => {
   const pc = createPeerConnection(id)
   peerConnections[id] = pc
@@ -87,6 +100,7 @@ function createPeerConnection(id) {
   }
 
   pc.ontrack = (e) => {
+    console.log('Track received from:', id, e.streams[0])
     const existing = remoteStreams.value.find((s) => s.id === id)
     if (!existing) {
       remoteStreams.value.push({ id, stream: e.streams[0] })

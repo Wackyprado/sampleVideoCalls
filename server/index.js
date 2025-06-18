@@ -17,32 +17,28 @@ const io = new Server(server, {
 const port = process.env.PORT || 3000;
 
 io.on('connection', socket => {
-  console.log('a user connected:', socket.id);
+  socket.on('join', roomId => {
+    socket.join(roomId);
+    // Let others know this peer joined
+    socket.to(roomId).emit('peer-joined', socket.id);
 
-  socket.on('join', room => {
-    socket.join(room);
-    socket.to(room).emit('peer-joined', socket.id);
+    // Send existing peers to the new peer
+    const others = Array.from(io.sockets.adapter.rooms.get(roomId) || []);
+    const otherPeers = others.filter(id => id !== socket.id);
+
+    socket.emit('existing-peers', otherPeers);
   });
 
-  socket.on('offer', (data) => {
-    socket.to(data.target).emit('offer', {
-      sdp: data.sdp,
-      caller: socket.id
-    });
+  socket.on('offer', ({ sdp, target }) => {
+    io.to(target).emit('offer', { sdp, caller: socket.id });
   });
 
-  socket.on('answer', (data) => {
-    socket.to(data.target).emit('answer', {
-      sdp: data.sdp,
-      callee: socket.id
-    });
+  socket.on('answer', ({ sdp, target }) => {
+    io.to(target).emit('answer', { sdp, callee: socket.id });
   });
 
-  socket.on('ice-candidate', (data) => {
-    socket.to(data.target).emit('ice-candidate', {
-      candidate: data.candidate,
-      sender: socket.id
-    });
+  socket.on('ice-candidate', ({ target, candidate }) => {
+    io.to(target).emit('ice-candidate', { candidate, sender: socket.id });
   });
 });
 
