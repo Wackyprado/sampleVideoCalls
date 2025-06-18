@@ -16,17 +16,17 @@ const io = new Server(server, {
 
 const port = process.env.PORT || 3000;
 
-io.on('connection', socket => {
-  socket.on('join', roomId => {
+io.on('connection', (socket) => {
+  socket.on('join', (roomId) => {
     socket.join(roomId);
-    // Let others know this peer joined
+
+    // Notify existing peers about the new one
     socket.to(roomId).emit('peer-joined', socket.id);
 
-    // Send existing peers to the new peer
-    const others = Array.from(io.sockets.adapter.rooms.get(roomId) || []);
-    const otherPeers = others.filter(id => id !== socket.id);
-
-    socket.emit('existing-peers', otherPeers);
+    // Send existing peer list to new peer
+    const peers = Array.from(io.sockets.adapter.rooms.get(roomId) || []);
+    const others = peers.filter(id => id !== socket.id);
+    socket.emit('existing-peers', others);
   });
 
   socket.on('offer', ({ sdp, target }) => {
@@ -37,7 +37,7 @@ io.on('connection', socket => {
     io.to(target).emit('answer', { sdp, callee: socket.id });
   });
 
-  socket.on('ice-candidate', ({ target, candidate }) => {
+  socket.on('ice-candidate', ({ candidate, target }) => {
     io.to(target).emit('ice-candidate', { candidate, sender: socket.id });
   });
 });

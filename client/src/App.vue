@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, watch, nextTick } from 'vue'
+import { ref, onMounted, onUpdated, nextTick } from 'vue'
 import io from 'socket.io-client'
 
 const localVideo = ref(null)
@@ -40,6 +40,8 @@ onMounted(async () => {
 })
 
 let remoteSocketId = null
+
+// socket.emit('join', 'room123');
 
 socket.on('existing-peers', (peers) => {
   peers.forEach(async (id) => {
@@ -110,11 +112,12 @@ function createPeerConnection(id) {
   return pc
 }
 
-watch(remoteStreams, (streams) => {
-  streams.forEach((remote) => {
-    nextTick(() => {
+onUpdated(() => {
+  nextTick(() => {
+    remoteStreams.value.forEach((remote) => {
       const video = document.querySelector(`video[data-id="${remote.id}"]`)
       if (video && !video.srcObject) {
+        console.log(`🔗 Binding stream to video [${remote.id}]`)
         video.srcObject = remote.stream
       }
     })
@@ -137,6 +140,8 @@ watch(remoteStreams, (streams) => {
 <style scoped>
 video {
   width: 300px;
+  height: auto;
+  background: black;
   margin: 10px;
 }
 </style>
