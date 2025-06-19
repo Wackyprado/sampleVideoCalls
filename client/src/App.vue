@@ -12,8 +12,16 @@ const peerConnections = {}
 let localStream
 
 onMounted(async () => {
-  localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-  localVideo.value.srcObject = localStream
+  try {
+    localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+    if (localVideo.value) {
+      localVideo.value.srcObject = localStream
+    }
+    console.log('Local stream loaded ✅')
+  } catch (err) {
+    console.error('Error loading camera:', err)
+  }
+
   socket.emit('join', 'room123')
 })
 
@@ -111,25 +119,177 @@ onUpdated(() => {
     })
   })
 })
+
+const isMuted = ref(false)
+
+function toggleMute() {
+  const audioTrack = localStream?.getAudioTracks()[0]
+  if (audioTrack) {
+    audioTrack.enabled = !audioTrack.enabled
+    isMuted.value = !audioTrack.enabled
+  }
+}
+
+let usingFrontCamera = true
+
+async function switchCamera() {
+  // Stop current video track
+  localStream?.getVideoTracks()[0]?.stop()
+
+  usingFrontCamera = !usingFrontCamera
+
+  const newStream = await navigator.mediaDevices.getUserMedia({
+    video: { facingMode: usingFrontCamera ? 'user' : 'environment' },
+    audio: true,
+  })
+
+  const newVideoTrack = newStream.getVideoTracks()[0]
+  const oldVideoTrack = localStream.getVideoTracks()[0]
+
+  // Replace video track in the stream and in each connection
+  localStream.removeTrack(oldVideoTrack)
+  localStream.addTrack(newVideoTrack)
+
+  if (localVideo.value) {
+    localVideo.value.srcObject = newStream
+  }
+
+  // Replace the track in all peer connections
+  for (const pc of Object.values(peerConnections)) {
+    const sender = pc.getSenders().find((s) => s.track?.kind === 'video')
+    if (sender) {
+      sender.replaceTrack(newVideoTrack)
+    }
+  }
+
+  // Update local stream reference
+  localStream = newStream
+}
+
+const isCameraOff = ref(false)
+
+async function toggleCamera() {
+  const videoTrack = localStream?.getVideoTracks()[0]
+
+  if (!isCameraOff.value && videoTrack) {
+    // 👉 Turn camera off
+    videoTrack.stop()
+    localStream.removeTrack(videoTrack)
+    isCameraOff.value = true
+
+    if (localVideo.value) {
+      localVideo.value.srcObject = null
+    }
+
+    // Optionally notify peers (not required for track stop)
+  } else {
+    // 👉 Turn camera back on
+    const newStream = await navigator.mediaDevices.getUserMedia({
+      video: true,
+      audio: false,
+    })
+
+    const newVideoTrack = newStream.getVideoTracks()[0]
+    localStream.addTrack(newVideoTrack)
+
+    // 🔄 Replace video track in all existing peer connections
+    for (const pc of Object.values(peerConnections)) {
+      const sender = pc.getSenders().find((s) => s.track?.kind === 'video')
+      if (sender) {
+        sender.replaceTrack(newVideoTrack)
+      } else {
+        pc.addTrack(newVideoTrack, localStream)
+      }
+    }
+
+    // ✅ Update local preview
+    if (localVideo.value) {
+      localVideo.value.srcObject = localStream
+    }
+
+    isCameraOff.value = false
+  }
+}
+
+function leaveRoom() {
+  // Close all peer connections
+  Object.values(peerConnections).forEach((pc) => pc.close())
+  Object.keys(peerConnections).forEach((id) => delete peerConnections[id])
+
+  // Stop local media tracks
+  if (localStream) {
+    localStream.getTracks().forEach((track) => track.stop())
+  }
+
+  // Clear video element
+  if (localVideo.value) {
+    localVideo.value.srcObject = null
+  }
+
+  // Leave the room
+  socket.emit('leave-room')
+
+  // Clear remote streams
+  remoteStreams.value = []
+}
 </script>
 
 <template>
-  <div>
-    <h3>Local</h3>
-    <video ref="localVideo" autoplay playsinline muted></video>
+  <div class="h-screen w-screen flex flex-col bg-gray-900 text-white">
+    <!-- Header -->
+    <header class="flex items-center justify-between p-4 bg-gray-800 shadow">
+      <h1 class="text-lg font-semibold">Video Room</h1>
+      <div class="flex space-x-2">
+        <button
+          @click="toggleMute"
+          class="bg-gray-700 hover:bg-gray-600 text-sm px-3 py-2 rounded transition"
+        >
+          {{ isMuted ? 'Unmute' : 'Mute' }}
+        </button>
+        <button
+          @click="toggleCamera"
+          class="bg-gray-700 hover:bg-gray-600 text-sm px-3 py-2 rounded transition"
+        >
+          {{ isCameraOff ? 'Turn Camera On' : 'Close Camera' }}
+        </button>
+        <button
+          @click="switchCamera"
+          class="bg-gray-700 hover:bg-gray-600 text-sm px-3 py-2 rounded transition hidden md:inline"
+        >
+          Switch Camera
+        </button>
+        <button
+          @click="leaveRoom"
+          class="bg-red-600 hover:bg-red-500 text-sm px-3 py-2 rounded transition"
+        >
+          Leave
+        </button>
+      </div>
+    </header>
 
-    <h3>Remote Peers</h3>
-    <div v-for="remote in remoteStreams" :key="remote.id">
-      <video :data-id="remote.id" autoplay playsinline></video>
+    <!-- Remote Peers Grid -->
+    <main class="flex-1 p-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 overflow-auto">
+      <div
+        v-for="remote in remoteStreams"
+        :key="remote.id"
+        class="relative bg-black rounded-lg overflow-hidden shadow-md"
+      >
+        <video
+          :ref="'remote-' + remote.id"
+          autoplay
+          playsinline
+          class="rounded-lg w-full h-full object-cover"
+        />
+      </div>
+    </main>
+
+    <!-- Local Video -->
+    <div
+      class="absolute bottom-4 right-4 w-40 h-28 shadow-lg rounded-lg overflow-hidden border border-white/10"
+    >
+      <video ref="localVideo" autoplay playsinline muted class="w-full h-full object-cover" />
     </div>
   </div>
 </template>
 
-<style scoped>
-video {
-  width: 300px;
-  height: auto;
-  background: black;
-  margin: 10px;
-}
-</style>
+<style scoped></style>
