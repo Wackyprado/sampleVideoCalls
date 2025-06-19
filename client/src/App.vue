@@ -278,7 +278,7 @@ for (const pc of Object.values(peerConnections)) {
 
 const videoCardSize = computed(() => {
   const count = remoteStreams.value.length
-  if (count <= 1) return 'w-full h-[60vh]'
+  if (count <= 1) return 'w-full h-[80vh]'
   if (count === 2) return 'w-[48%] h-[45vh]'
   if (count <= 4) return 'w-[48%] h-[40vh]'
   if (count <= 6) return 'w-[31%] h-[30vh]'
