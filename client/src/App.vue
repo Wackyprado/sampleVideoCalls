@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, onUpdated, nextTick } from 'vue'
+import { ref, onMounted, onUpdated, nextTick, watch } from 'vue'
 import io from 'socket.io-client'
 
 const localVideo = ref(null)
@@ -120,6 +120,17 @@ onUpdated(() => {
   })
 })
 
+// watch(remoteStreams, () => {
+//   nextTick(() => {
+//     remoteStreams.value.forEach(({ id, stream }) => {
+//       const video = document.querySelector(`video[data-id="${id}"]`)
+//       if (video && !video.srcObject) {
+//         video.srcObject = stream
+//       }
+//     })
+//   })
+// })
+
 const isMuted = ref(false)
 
 function toggleMute() {
@@ -232,6 +243,15 @@ function leaveRoom() {
   // Clear remote streams
   remoteStreams.value = []
 }
+
+function attachRemoteVideo(el, id) {
+  if (!el) return
+
+  const remote = remoteStreams.value.find((r) => r.id === id)
+  if (remote && remote.stream) {
+    el.srcObject = remote.stream
+  }
+}
 </script>
 
 <template>
@@ -269,17 +289,14 @@ function leaveRoom() {
 
     <!-- Remote Peers Grid -->
     <main class="flex-1 p-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 overflow-auto">
-      <div
-        v-for="remote in remoteStreams"
-        :key="remote.id"
-        class="relative bg-black rounded-lg overflow-hidden shadow-md"
-      >
+      <div v-for="remote in remoteStreams" :key="remote.id" class="video-card">
         <video
-          :ref="'remote-' + remote.id"
           autoplay
           playsinline
-          class="rounded-lg w-full h-full object-cover"
-        />
+          muted
+          class="rounded w-full h-full object-cover"
+          :ref="(el) => attachRemoteVideo(el, remote.id)"
+        ></video>
       </div>
     </main>
 
