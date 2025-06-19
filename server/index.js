@@ -3,7 +3,7 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
-
+const axios = require('axios')
 
 const app = express();
 app.use(cors());
@@ -66,6 +66,25 @@ io.on("connection", (socket) => {
   })
 })
 
+
+app.get('/ice', async (req, res) => {
+  try {
+    const response = await axios.put(
+      'https://global.xirsys.net/_turn/videoCalls',
+      {},
+      {
+        headers: {
+          'Authorization': 'Basic ' + Buffer.from('KramCode:f3ffdb08-4cd5-11f0-9421-0242ac13000').toString('base64'),
+        }
+      }
+    )
+    const iceServers = response.data.v.iceServers
+    res.json(iceServers)
+  } catch (err) {
+    console.error('Error fetching ICE servers:', err)
+    res.status(500).send('Failed to get ICE servers')
+  }
+})
 
 
 server.listen(port, () => {

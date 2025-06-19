@@ -1,7 +1,11 @@
 <script setup>
 import { ref, onMounted, onUpdated, nextTick, watch, computed } from 'vue'
 import io from 'socket.io-client'
+import { createSwapy } from 'swapy'
+import axios from 'axios'
 
+const swapy = ref(null)
+const container = ref()
 const localVideo = ref(null)
 const remoteVideo = ref(null)
 
@@ -10,7 +14,7 @@ const socket = io(import.meta.env.VITE_API_URL)
 //const peerConnection = new RTCPeerConnection()
 const peerConnections = {}
 let localStream
-
+let iceServers = []
 const blankTrack = createBlankVideoTrack()
 const isMobile = /iPhone|iPad|Android/i.test(navigator.userAgent)
 
@@ -18,9 +22,18 @@ const localVideoContainer = ref(null)
 let isDragging = false
 let offset = { x: 0, y: 0 }
 
-console.log(localVideoContainer)
+async function fetchIceServers() {
+  try {
+    const res = await axios.get(import.meta.env.VITE_API_URL + '/ice')
+    iceServers.value = res.data
+    console.log('✅ ICE servers loaded:', iceServers.value)
+  } catch (e) {
+    console.error('❌ Failed to fetch ICE servers', e)
+  }
+}
 
 onMounted(async () => {
+  await fetchIceServers()
   try {
     localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true })
     if (localVideo.value) {
@@ -41,13 +54,22 @@ onMounted(async () => {
     }
   })
 
-  const container = document.getElementById('video-grid')
-  if (container) {
-    new Swapy(container, {
-      animation: true,
-      draggableClass: 'draggable-tile',
+  if (container.value) {
+    swapy.value = createSwapy(container.value)
+
+    // Your event listeners
+    swapy.value.onSwap((event) => {
+      console.log('swap', event)
     })
   }
+
+  // const container = document.getElementById('video-grid')
+  // if (container) {
+  //   new swapy(container, {
+  //     animation: true,
+  //     draggableClass: 'draggable-tile',
+  //   })
+  // }
 })
 
 let remoteSocketId = null
@@ -112,22 +134,26 @@ socket.on('peer-left', (id) => {
 })
 
 function createPeerConnection(id) {
+  // const pc = new RTCPeerConnection({
+  //   iceServers: [
+  //     { urls: 'stun:stun.l.google.com:19302' }, // ✅ Public STUN
+  //     {
+  //       urls: 'turn:openrelay.metered.ca:80', // ✅ Free TURN (relay)
+  //       username: 'openrelayproject',
+  //       credential: 'openrelayproject',
+  //     },
+  //   ],
+  // })
+
   const pc = new RTCPeerConnection({
-    iceServers: [
-      { urls: 'stun:stun.l.google.com:19302' }, // ✅ Public STUN
-      {
-        urls: 'turn:openrelay.metered.ca:80', // ✅ Free TURN (relay)
-        username: 'openrelayproject',
-        credential: 'openrelayproject',
-      },
-    ],
+    iceServers: iceServers.value.length
+      ? iceServers.value
+      : [{ urls: 'stun:stun.l.google.com:19302' }], // fallback STUN
   })
+
   pc.onicecandidate = (e) => {
     if (e.candidate) {
-      socket.emit('ice-candidate', {
-        target: id,
-        candidate: e.candidate,
-      })
+      socket.emit('ice-candidate', { target: id, candidate: e.candidate })
     }
   }
 
@@ -398,6 +424,7 @@ const y = 0
 
     <main
       id="video-grid"
+      ref="container"
       class="flex flex-wrap justify-center items-center gap-4 w-full h-full p-4"
     >
       <div
