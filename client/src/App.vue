@@ -276,7 +276,7 @@ for (const pc of Object.values(peerConnections)) {
 
 const videoCardSize = computed(() => {
   const count = remoteStreams.value.length
-  if (count <= 1) return 'w-full h-full'
+  if (count <= 1) return 'w-full h-[60vh]'
   if (count === 2) return 'w-[48%] h-[45vh]'
   if (count <= 4) return 'w-[48%] h-[40vh]'
   if (count <= 6) return 'w-[31%] h-[30vh]'
@@ -336,7 +336,7 @@ const videoCardSize = computed(() => {
 
     <!-- Local Video -->
     <div
-      class="absolute bottom-4 right-4 w-100 h-50 shadow-lg rounded-lg overflow-hidden border border-white/10"
+      class="absolute bottom-4 right-4 w-120 h-60 shadow-lg rounded-lg overflow-hidden border border-white/10"
     >
       <video ref="localVideo" autoplay playsinline muted class="w-full h-full object-cover" />
     </div>
