@@ -101,37 +101,39 @@ function createPeerConnection(id) {
   }
 
   pc.ontrack = (e) => {
-    const existing = remoteStreams.value.find((s) => s.id === id)
-    if (!existing) {
-      remoteStreams.value.push({ id, stream: e.streams[0] })
+    const stream = e.streams[0]
+    const existing = remoteStreams.value.find((r) => r.id === id)
+    if (!existing && stream) {
+      console.log('✅ Track received:', id, stream)
+      remoteStreams.value.push({ id, stream })
     }
   }
 
   return pc
 }
 
-onUpdated(() => {
-  nextTick(() => {
-    remoteStreams.value.forEach((remote) => {
-      const video = document.querySelector(`video[data-id="${remote.id}"]`)
-      if (video && !video.srcObject) {
-        console.log(`🔗 Binding stream to video [${remote.id}]`)
-        video.srcObject = remote.stream
-      }
-    })
-  })
-})
-
-// watch(remoteStreams, () => {
+// onUpdated(() => {
 //   nextTick(() => {
-//     remoteStreams.value.forEach(({ id, stream }) => {
-//       const video = document.querySelector(`video[data-id="${id}"]`)
+//     remoteStreams.value.forEach((remote) => {
+//       const video = document.querySelector(`video[data-id="${remote.id}"]`)
 //       if (video && !video.srcObject) {
-//         video.srcObject = stream
+//         console.log(`🔗 Binding stream to video [${remote.id}]`)
+//         video.srcObject = remote.stream
 //       }
 //     })
 //   })
 // })
+
+watch(remoteStreams, () => {
+  nextTick(() => {
+    remoteStreams.value.forEach(({ id, stream }) => {
+      const video = document.querySelector(`video[data-id="${id}"]`)
+      if (video && !video.srcObject) {
+        video.srcObject = stream
+      }
+    })
+  })
+})
 
 const isMuted = ref(false)
 
@@ -248,10 +250,10 @@ function leaveRoom() {
 
 function attachRemoteVideo(el, id) {
   if (!el) return
-
   const remote = remoteStreams.value.find((r) => r.id === id)
-  if (remote && remote.stream) {
+  if (remote && remote.stream && el.srcObject !== remote.stream) {
     el.srcObject = remote.stream
+    console.log(`📹 Attached stream for peer ${id}`)
   }
 }
 
