@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, onUpdated, nextTick, watch } from 'vue'
+import { ref, onMounted, onUpdated, nextTick, watch, computed } from 'vue'
 import io from 'socket.io-client'
 
 const localVideo = ref(null)
@@ -11,6 +11,8 @@ const socket = io(import.meta.env.VITE_API_URL)
 const peerConnections = {}
 let localStream
 
+const blankTrack = createBlankVideoTrack()
+const isMobile = /iPhone|iPad|Android/i.test(navigator.userAgent)
 onMounted(async () => {
   try {
     localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true })
@@ -252,6 +254,34 @@ function attachRemoteVideo(el, id) {
     el.srcObject = remote.stream
   }
 }
+
+function createBlankVideoTrack() {
+  const canvas = document.createElement('canvas')
+  canvas.width = 640
+  canvas.height = 480
+  const ctx = canvas.getContext('2d')
+  ctx.fillStyle = 'black'
+  ctx.fillRect(0, 0, canvas.width, canvas.height)
+
+  const stream = canvas.captureStream(10) // 10 FPS
+  return stream.getVideoTracks()[0]
+}
+
+for (const pc of Object.values(peerConnections)) {
+  const sender = pc.getSenders().find((s) => s.track?.kind === 'video')
+  if (sender) {
+    sender.replaceTrack(blankTrack)
+  }
+}
+
+const videoCardSize = computed(() => {
+  const count = remoteStreams.value.length
+  if (count <= 1) return 'w-full h-[60vh]'
+  if (count === 2) return 'w-[48%] h-[45vh]'
+  if (count <= 4) return 'w-[48%] h-[40vh]'
+  if (count <= 6) return 'w-[31%] h-[30vh]'
+  return 'w-[24%] h-[25vh]'
+})
 </script>
 
 <template>
@@ -273,8 +303,9 @@ function attachRemoteVideo(el, id) {
           {{ isCameraOff ? 'Turn Camera On' : 'Close Camera' }}
         </button>
         <button
+          v-if="isMobile"
           @click="switchCamera"
-          class="bg-gray-700 hover:bg-gray-600 text-sm px-3 py-2 rounded transition hidden md:inline"
+          class="bg-gray-700 hover:bg-gray-600 text-sm px-3 py-2 rounded transition"
         >
           Switch Camera
         </button>
@@ -287,14 +318,17 @@ function attachRemoteVideo(el, id) {
       </div>
     </header>
 
-    <!-- Remote Peers Grid -->
-    <main class="flex-1 p-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 overflow-auto">
-      <div v-for="remote in remoteStreams" :key="remote.id" class="video-card">
+    <main class="flex-1 p-4 flex flex-wrap justify-center items-center gap-4 bg-gray-900">
+      <div
+        v-for="remote in remoteStreams"
+        :key="remote.id"
+        class="bg-black rounded-lg overflow-hidden shadow-md"
+        :class="videoCardSize"
+      >
         <video
           autoplay
           playsinline
-          muted
-          class="rounded w-full h-full object-cover"
+          class="w-full h-full object-cover rounded"
           :ref="(el) => attachRemoteVideo(el, remote.id)"
         ></video>
       </div>
@@ -302,7 +336,7 @@ function attachRemoteVideo(el, id) {
 
     <!-- Local Video -->
     <div
-      class="absolute bottom-4 right-4 w-40 h-28 shadow-lg rounded-lg overflow-hidden border border-white/10"
+      class="absolute bottom-4 right-4 w-120 h-60 shadow-lg rounded-lg overflow-hidden border border-white/10"
     >
       <video ref="localVideo" autoplay playsinline muted class="w-full h-full object-cover" />
     </div>
