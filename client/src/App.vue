@@ -13,6 +13,13 @@ let localStream
 
 const blankTrack = createBlankVideoTrack()
 const isMobile = /iPhone|iPad|Android/i.test(navigator.userAgent)
+
+const localVideoContainer = ref(null)
+let isDragging = false
+let offset = { x: 0, y: 0 }
+
+console.log(localVideoContainer)
+
 onMounted(async () => {
   try {
     localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true })
@@ -25,6 +32,22 @@ onMounted(async () => {
   }
 
   socket.emit('join', 'room123')
+
+  nextTick(() => {
+    if (localVideoContainer.value) {
+      const width = localVideoContainer.value.offsetWidth
+      const height = localVideoContainer.value.offsetHeight
+      console.log('Video dimensions:', width, height)
+    }
+  })
+
+  const container = document.getElementById('video-grid')
+  if (container) {
+    new Swapy(container, {
+      animation: true,
+      draggableClass: 'draggable-tile',
+    })
+  }
 })
 
 let remoteSocketId = null
@@ -284,6 +307,51 @@ const videoCardSize = computed(() => {
   if (count <= 6) return 'w-[31%] h-[30vh]'
   return 'w-[24%] h-[25vh]'
 })
+
+function startDrag(e) {
+  isDragging = true
+  const rect = localVideoContainer.value.getBoundingClientRect()
+  offset.x = e.clientX - rect.left
+  offset.y = e.clientY - rect.top
+
+  document.addEventListener('mousemove', onDrag)
+  document.addEventListener('mouseup', stopDrag)
+}
+
+function onDrag(e) {
+  if (!isDragging || !localVideoContainer.value) return
+  const el = localVideoContainer.value
+  if (!el) return
+  const winWidth = window.innerWidth
+  const winHeight = window.innerHeight
+
+  const width = localVideoContainer.value.offsetWidth || 0
+  const height = localVideoContainer.value.offsetHeight || 0
+
+  const x = Math.min(Math.max(0, e.clientX - offset.x), winWidth - width)
+  const y = Math.min(Math.max(0, e.clientY - offset.y), winHeight - height)
+
+  localVideoContainer.value.style.left = `${x}px`
+  localVideoContainer.value.style.top = `${y}px`
+  localVideoContainer.value.style.right = 'auto'
+  localVideoContainer.value.style.bottom = 'auto'
+  localVideoContainer.value.style.position = 'absolute'
+}
+
+function stopDrag() {
+  isDragging = false
+  document.removeEventListener('mousemove', onDrag)
+  document.removeEventListener('mouseup', stopDrag)
+}
+
+const winWidth = window.innerWidth
+const winHeight = window.innerHeight
+
+const width = 0
+const height = 0
+
+const x = 0
+const y = 0
 </script>
 
 <template>
@@ -320,29 +388,36 @@ const videoCardSize = computed(() => {
       </div>
     </header>
 
-    <main class="flex-1 p-4 flex flex-wrap justify-center items-center gap-4 bg-gray-900">
+    <main
+      id="video-grid"
+      class="flex flex-wrap justify-center items-center gap-4 w-full h-full p-4"
+    >
       <div
         v-for="remote in remoteStreams"
         :key="remote.id"
-        class="bg-black rounded-lg overflow-hidden shadow-md"
-        :class="videoCardSize"
+        class="draggable-tile bg-black rounded-lg overflow-hidden shadow-md w-[300px] h-[200px] cursor-move"
       >
         <video
+          :ref="(el) => attachRemoteVideo(el, remote.id)"
           autoplay
           playsinline
           class="w-full h-full object-cover rounded"
-          :ref="(el) => attachRemoteVideo(el, remote.id)"
-        ></video>
+        />
       </div>
     </main>
-
     <!-- Local Video -->
     <div
-      class="absolute bottom-4 right-4 w-120 h-60 shadow-lg rounded-lg overflow-hidden border border-white/10"
+      ref="localVideoContainer"
+      class="absolute bottom-4 right-4 w-100 h-50 shadow-lg rounded-lg overflow-hidden border border-white/10 cursor-move z-50"
+      @mousedown="startDrag"
     >
       <video ref="localVideo" autoplay playsinline muted class="w-full h-full object-cover" />
     </div>
   </div>
 </template>
 
-<style scoped></style>
+<style scoped>
+.draggable-tile {
+  transition: transform 0.2s ease;
+}
+</style>
