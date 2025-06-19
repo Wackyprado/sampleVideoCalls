@@ -15,30 +15,56 @@ const io = new Server(server, {
 
 
 const port = process.env.PORT || 3000;
+const socketToRoom = new Map()
 
-io.on('connection', (socket) => {
-socket.on('join', (roomId) => {
-  socket.join(roomId)
-  const peersInRoom = [...io.sockets.adapter.rooms.get(roomId)].filter(id => id !== socket.id)
-  socket.emit('existing-peers', peersInRoom)
+io.on("connection", (socket) => {
+  console.log("🟢 New connection:", socket.id)
 
-  // Notify others
-  socket.to(roomId).emit('peer-joined', socket.id)
+  // Handle room joining
+  socket.on("join", (roomId) => {
+    console.log(`📥 ${socket.id} joining room: ${roomId}`)
+
+    socket.join(roomId)
+    socketToRoom.set(socket.id, roomId)
+
+    // Get other peers in room
+    const room = io.sockets.adapter.rooms.get(roomId)
+    const peers = [...room].filter((id) => id !== socket.id)
+
+    // Send the list of existing peers to the joining socket
+    socket.emit("existing-peers", peers)
+
+    // Notify existing peers that a new one joined
+    socket.to(roomId).emit("peer-joined", socket.id)
+  })
+
+  // Handle incoming offer
+  socket.on("offer", ({ sdp, target }) => {
+    console.log(`📡 Offer from ${socket.id} to ${target}`)
+    io.to(target).emit("offer", { sdp, caller: socket.id })
+  })
+
+  // Handle answer
+  socket.on("answer", ({ sdp, target }) => {
+    console.log(`✅ Answer from ${socket.id} to ${target}`)
+    io.to(target).emit("answer", { sdp, callee: socket.id })
+  })
+
+  // Handle ICE candidate
+  socket.on("ice-candidate", ({ candidate, target }) => {
+    io.to(target).emit("ice-candidate", { candidate, sender: socket.id })
+  })
+
+  // Handle disconnect
+  socket.on("disconnect", () => {
+    const roomId = socketToRoom.get(socket.id)
+    if (roomId) {
+      console.log(`❌ ${socket.id} disconnected from room: ${roomId}`)
+      socket.to(roomId).emit("peer-left", socket.id)
+      socketToRoom.delete(socket.id)
+    }
+  })
 })
-
-
-  socket.on('offer', ({ sdp, target }) => {
-    io.to(target).emit('offer', { sdp, caller: socket.id });
-  });
-
-  socket.on('answer', ({ sdp, target }) => {
-    io.to(target).emit('answer', { sdp, callee: socket.id });
-  });
-
-  socket.on('ice-candidate', ({ candidate, target }) => {
-    io.to(target).emit('ice-candidate', { candidate, sender: socket.id });
-  });
-});
 
 
 

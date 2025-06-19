@@ -11,28 +11,6 @@ const socket = io(import.meta.env.VITE_API_URL)
 const peerConnections = {}
 let localStream
 
-// onMounted(async () => {
-//   localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-//   localVideo.value.srcObject = localStream
-
-//   localStream.getTracks().forEach((track) => peerConnection.addTrack(track, localStream))
-
-//   socket.emit('join', 'room123')
-
-//   peerConnection.onicecandidate = (e) => {
-//     if (e.candidate) {
-//       socket.emit('ice-candidate', {
-//         target: remoteSocketId,
-//         candidate: e.candidate,
-//       })
-//     }
-//   }
-
-//   peerConnection.ontrack = (e) => {
-//     remoteVideo.value.srcObject = e.streams[0]
-//   }
-// })
-
 onMounted(async () => {
   localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true })
   localVideo.value.srcObject = localStream
@@ -94,6 +72,12 @@ socket.on('ice-candidate', async ({ candidate, sender }) => {
   }
 })
 
+socket.on('peer-left', (id) => {
+  console.log(`❌ Peer ${id} left`)
+  delete peerConnections[id]
+  remoteStreams.value = remoteStreams.value.filter((s) => s.id !== id)
+})
+
 function createPeerConnection(id) {
   const pc = new RTCPeerConnection()
 
@@ -107,7 +91,6 @@ function createPeerConnection(id) {
   }
 
   pc.ontrack = (e) => {
-    console.log('Track received from:', id, e.streams[0])
     const existing = remoteStreams.value.find((s) => s.id === id)
     if (!existing) {
       remoteStreams.value.push({ id, stream: e.streams[0] })
