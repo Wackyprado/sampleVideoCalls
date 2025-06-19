@@ -15,6 +15,8 @@ const socket = io(import.meta.env.VITE_API_URL)
 const peerConnections = {}
 let localStream
 let iceServers = []
+const isScreenSharing = ref(false)
+let screenTrack = null
 const blankTrack = createBlankVideoTrack()
 const isMobile = /iPhone|iPad|Android/i.test(navigator.userAgent)
 
@@ -167,6 +169,52 @@ function createPeerConnection(id) {
   }
 
   return pc
+}
+
+async function shareScreen() {
+  try {
+    const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true })
+    screenTrack = screenStream.getVideoTracks()[0]
+
+    // Replace video track in all peer connections
+    for (const pc of Object.values(peerConnections)) {
+      const sender = pc.getSenders().find((s) => s.track.kind === 'video')
+      if (sender) sender.replaceTrack(screenTrack)
+    }
+
+    // Show screen locally
+    localVideo.value.srcObject = screenStream
+    isScreenSharing.value = true
+
+    // If user stops via browser UI
+    screenTrack.onended = () => {
+      stopScreenSharing()
+    }
+  } catch (err) {
+    console.error('Failed to share screen:', err)
+  }
+}
+
+async function stopScreenSharing() {
+  if (!screenTrack) return
+
+  screenTrack.stop()
+
+  // Get camera again
+  const camStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+  const camTrack = camStream.getVideoTracks()[0]
+
+  // Replace tracks in all peer connections
+  for (const pc of Object.values(peerConnections)) {
+    const sender = pc.getSenders().find((s) => s.track.kind === 'video')
+    if (sender) sender.replaceTrack(camTrack)
+  }
+
+  // Restore local video
+  localVideo.value.srcObject = camStream
+  localStream.value = camStream
+  isScreenSharing.value = false
+  screenTrack = null
 }
 
 // onUpdated(() => {
@@ -418,6 +466,21 @@ const y = 0
           class="bg-red-600 hover:bg-red-500 text-sm px-3 py-2 rounded transition"
         >
           Leave
+        </button>
+        <button
+          v-if="!isScreenSharing"
+          @click="shareScreen"
+          class="bg-blue-600 hover:bg-blue-500 text-white text-sm px-4 py-2 rounded"
+        >
+          Share Screen
+        </button>
+
+        <button
+          v-else
+          @click="stopScreenSharing"
+          class="bg-gray-700 hover:bg-gray-600 text-white text-sm px-4 py-2 rounded"
+        >
+          Stop Sharing
         </button>
       </div>
     </header>
