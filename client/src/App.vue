@@ -112,8 +112,16 @@ socket.on('peer-left', (id) => {
 })
 
 function createPeerConnection(id) {
-  const pc = new RTCPeerConnection()
-
+  const pc = new RTCPeerConnection({
+    iceServers: [
+      { urls: 'stun:stun.l.google.com:19302' }, // ✅ Public STUN
+      {
+        urls: 'turn:openrelay.metered.ca:80', // ✅ Free TURN (relay)
+        username: 'openrelayproject',
+        credential: 'openrelayproject',
+      },
+    ],
+  })
   pc.onicecandidate = (e) => {
     if (e.candidate) {
       socket.emit('ice-candidate', {
